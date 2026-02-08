@@ -251,6 +251,8 @@
                 "CALSCALE:GREGORIAN"
             ];
 
+            let statsHtml = '<div style="margin-top: 20px; font-size: 0.9em; text-align: left;"><h3>Created Events:</h3>';
+
             // 4. Create Events from Groups
             for (const [key, groupRows] of groups) {
                 try {
@@ -299,8 +301,8 @@
                         if (secondConfirm) confirmStr += `, ${secondConfirm}`;
 
                         descText += `Confirmation: ${confirmStr}\\n`;
-                        descText += `Desc2: ${row['Desc2'] || ""}\\n`;
                         descText += `Flyers: ${row['Flyers']}\\n`;
+                        descText += `Desc2: ${row['Desc2'] || ""}\\n`;
                         descText += `Status: ${row['Status']}\\n`;
                         descText += `Refundable: ${row['Refundable']}\\n`;
                         if (row['Price']) descText += `Price: ${row['Price']}\\n`;
@@ -334,12 +336,24 @@
                     icalContent.push("END:VEVENT");
                     eventsAdded++;
 
+                    // Add to stats
+                    statsHtml += `
+                        <div style="background: #f9f9f9; padding: 10px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #ddd;">
+                            <strong>${summary}</strong><br>
+                            <span style="color: #666; font-size: 0.85em;">
+                                ${dateDisplay} • ${firstRow['Depart']} - ${firstRow['Arrive']}<br>
+                                ${groupRows.length} Passenger(s)
+                            </span>
+                        </div>
+                    `;
+
                 } catch (e) {
                     console.error("Group processing error:", e, key);
                 }
             }
 
             icalContent.push("END:VCALENDAR");
+            statsHtml += '</div>';
 
             if (eventsAdded === 0) {
                 showStatus("No events were created. Check data format.", "error");
@@ -362,6 +376,10 @@
             document.body.removeChild(link);
 
             showStatus(`Success! Created ${eventsAdded} events from ${parsedRows.length} rows. Check your downloads.`, "success");
+
+            // Append Stats
+            const statusEl = document.getElementById('status');
+            statusEl.innerHTML += statsHtml;
         }
     </script>
 </body>
