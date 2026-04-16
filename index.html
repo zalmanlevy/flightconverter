@@ -149,24 +149,15 @@
         }
 
         function parseDateString(dateStr) {
-            // Expected Format: "Wednesday, February 25, 2026" or similar
-            // We need to parse this into Year, Month, Day
-            // Normalize by stripping day-of-week prefix (e.g. "Wednesday, ") if present
-            const cleaned = dateStr.replace(/^[A-Za-z]+,\s*/, '').trim();
-            // Parse month name, day, year explicitly to avoid UTC/timezone issues
-            const match = cleaned.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
+            // Expected format: M/D/YYYY (e.g. 5/21/2026)
+            const match = dateStr.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
             if (!match) {
-                throw new Error("Invalid Date Format: " + dateStr);
-            }
-            const monthNames = ['january','february','march','april','may','june','july','august','september','october','november','december'];
-            const monthIndex = monthNames.indexOf(match[1].toLowerCase());
-            if (monthIndex === -1) {
-                throw new Error("Invalid Month in Date: " + dateStr);
+                throw new Error("Invalid Date Format (expected M/D/YYYY): " + dateStr);
             }
             return {
-                year: parseInt(match[3], 10),
-                month: monthIndex + 1,
-                day: parseInt(match[2], 10)
+                year:  parseInt(match[3], 10),
+                month: parseInt(match[1], 10),
+                day:   parseInt(match[2], 10)
             };
         }
 
