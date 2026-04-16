@@ -17,7 +17,8 @@
             background-color: #f5f5f7;
             color: #333;
             display: flex;
-            justify-content: center;
+            flex-direction: column;
+            align-items: center;
         }
 
         .container {
@@ -110,22 +111,6 @@
             border: 1px solid #feb2b2;
         }
 
-        /* Watermark */
-        body::before {
-            content: "";
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-image: url('zenfo_logo.png');
-            background-repeat: no-repeat;
-            background-position: center;
-            background-size: 50%;
-            opacity: 0.1;
-            z-index: -1;
-            pointer-events: none;
-        }
     </style>
 </head>
 
@@ -145,8 +130,12 @@
         <div id="status"></div>
     </div>
 
+    <div style="text-align: center; margin-top: 20px; font-size: 0.9em; color: #666;">
+        Please use our new website <a href="https://autoflights.zalmanlevy.com" target="_blank" style="color: #007aff; text-decoration: none; font-weight: 500;">Auto Flights</a>
+    </div>
+
     <script>
-        const REQUIRED_HEADERS = ['Date', 'Depart', 'Arrive', 'Airline', 'Flight#', 'Airports'];
+        const REQUIRED_HEADERS = ['Date', 'Depart', 'Arrive', 'Airline', 'Flight#', 'Airports', 'Confirm#'];
 
         function showStatus(message, type) {
             const el = document.getElementById('status');
@@ -162,14 +151,22 @@
         function parseDateString(dateStr) {
             // Expected Format: "Wednesday, February 25, 2026" or similar
             // We need to parse this into Year, Month, Day
-            const parts = new Date(dateStr);
-            if (isNaN(parts.getTime())) {
+            // Normalize by stripping day-of-week prefix (e.g. "Wednesday, ") if present
+            const cleaned = dateStr.replace(/^[A-Za-z]+,\s*/, '').trim();
+            // Parse month name, day, year explicitly to avoid UTC/timezone issues
+            const match = cleaned.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
+            if (!match) {
                 throw new Error("Invalid Date Format: " + dateStr);
             }
+            const monthNames = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+            const monthIndex = monthNames.indexOf(match[1].toLowerCase());
+            if (monthIndex === -1) {
+                throw new Error("Invalid Month in Date: " + dateStr);
+            }
             return {
-                year: parts.getFullYear(),
-                month: parts.getMonth() + 1,
-                day: parts.getDate()
+                year: parseInt(match[3], 10),
+                month: monthIndex + 1,
+                day: parseInt(match[2], 10)
             };
         }
 
@@ -223,9 +220,12 @@
 
             // 2. Parse all valid rows into objects
             const parsedRows = [];
+            const errors = [];
+            const requiredFields = ['Date', 'Depart', 'Airline', 'Confirm#'];
+
             for (let i = 1; i < rows.length; i++) {
                 const rowData = rows[i];
-                if (rowData.length < 2) continue; // Skip empty rows
+                if (rowData.every(cell => !cell.trim())) continue; // Skip completely empty rows
 
                 const row = {};
                 headers.forEach((header, index) => {
@@ -233,7 +233,15 @@
                 });
 
                 // Check essential fields
-                if (!row['Date'] || !row['Depart'] || !row['Airline'] || !row['Confirm#']) continue;
+                const missing = requiredFields.filter(f => !row[f]);
+                if (missing.length > 0) {
+                    errors.push({
+                        rowNumber: i + 1,
+                        missing: missing,
+                        data: rowData.join(' ')
+                    });
+                    continue;
+                }
 
                 parsedRows.push(row);
             }
@@ -294,7 +302,8 @@
                     const endString = formatICSDate(endObj.getFullYear(), endObj.getMonth() + 1, endObj.getDate(), endObj.getHours(), endObj.getMinutes());
 
                     const now = new Date();
-                    const dtStamp = formatICSDate(now.getFullYear(), now.getMonth() + 1, now.getDate(), now.getHours(), now.getMinutes());
+                    // DTSTAMP must be UTC per RFC 5545, denoted by trailing 'Z'
+                    const dtStamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}00Z`;
 
                     // --- Build Description ---
                     const dateDisplay = startObj.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -373,7 +382,15 @@
             statsHtml += '</div>';
 
             if (eventsAdded === 0) {
+                let errorDetails = "";
+                if (errors.length > 0) {
+                    errorDetails = `<div style="text-align: left; margin-top: 10px; color: #c53030;">
+                        <strong>Errors:</strong><br>
+                        ${errors.map(e => `Row ${e.rowNumber}: Missing ${e.missing.join(', ')}`).join('<br>')}
+                    </div>`;
+                }
                 showStatus("No events were created. Check data format.", "error");
+                document.getElementById('status').innerHTML += errorDetails;
                 return;
             }
 
@@ -390,6 +407,7 @@
             link.download = filename;
             document.body.appendChild(link);
             link.click();
+            URL.revokeObjectURL(link.href); // Release the object URL to avoid memory leaks
             document.body.removeChild(link);
 
             showStatus(`Success! Created ${eventsAdded} events from ${parsedRows.length} rows. Check your downloads.`, "success");
@@ -397,6 +415,21 @@
             // Append Stats
             const statusEl = document.getElementById('status');
             statusEl.innerHTML += statsHtml;
+
+            // Append Errors if any
+            if (errors.length > 0) {
+                let errorHtml = `
+                    <div style="margin-top: 20px; font-size: 0.9em; text-align: left; border-top: 1px solid #ddd; padding-top: 10px;">
+                        <h3 style="color: #c53030;">Skipped Rows (${errors.length}):</h3>
+                        ${errors.map(e => `
+                            <div style="background: #fff5f5; padding: 8px; margin-bottom: 5px; border-radius: 4px; border: 1px solid #feb2b2; font-size: 0.85em;">
+                                <strong>Row ${e.rowNumber}:</strong> Missing ${e.missing.join(', ')}
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                statusEl.innerHTML += errorHtml;
+            }
         }
     </script>
 </body>
